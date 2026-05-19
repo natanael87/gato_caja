@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador Interactivo: La Paradoja de la Escala</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        anahuac: '#FF6B00',
+                        'anahuac-dark': '#cc5500',
+                        quantum: '#00e5ff',
+                        darkbg: '#050505',
+                        panel: '#111111',
+                        bordercolor: '#222222'
+                    },
+                    fontFamily: {
+                        mono: ['Consolas', 'Menlo', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { margin: 0; background-color: #050505; color: #e5e5e5; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; }
+        canvas { display: block; width: 100%; height: 100%; border-radius: 0.5rem; background: radial-gradient(circle at center, #111116 0%, #030303 100%); }
+        
+        /* Controles y Botones */
+        .tab-btn { transition: all 0.3s ease; border: 1px solid transparent; }
+        .tab-btn.active { background-color: #FF6B00; color: #000; box-shadow: 0 0 15px rgba(255, 107, 0, 0.4); border-color: #FF6B00; font-weight: 700; }
+        .tab-btn:hover:not(.active) { border-color: #FF6B00; color: #FF6B00; }
+        
+        /* Sliders */
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: #FF6B00; cursor: pointer; margin-top: -6px; box-shadow: 0 0 10px #FF6B00; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #333; border-radius: 2px; }
+
+        /* Toggle Switch */
+        .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider-toggle { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #333; transition: .4s; border-radius: 24px; }
+        .slider-toggle:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider-toggle { background-color: #FF6B00; box-shadow: 0 0 10px #FF6B00; }
+        input:checked + .slider-toggle:before { transform: translateX(20px); }
+    </style>
+</head>
+<body class="h-screen flex flex-col p-4 gap-4">
+
+    <header class="flex-none flex flex-col md:flex-row justify-between items-center border-b border-bordercolor pb-4 gap-4">
+        <div>
+            <h1 class="text-2xl md:text-3xl font-light tracking-wide text-anahuac uppercase">La Paradoja de la Escala</h1>
+            <p class="text-gray-400 text-sm mt-1">El Gato de Schrödinger y la Decoherencia Ambiental</p>
+        </div>
+        <div class="flex gap-2 bg-panel p-1 border border-bordercolor rounded-lg">
+            <button onclick="setMode(1)" id="tab-1" class="tab-btn active px-4 py-2 rounded text-sm">1. Superposición Pura</button>
+            <button onclick="setMode(2)" id="tab-2" class="tab-btn px-4 py-2 rounded text-sm">2. Filtro Crítico</button>
+            <button onclick="openBox()" id="tab-3" class="tab-btn px-4 py-2 rounded text-sm bg-gray-800 text-white font-bold tracking-wide hover:bg-gray-700">3. ABRIR CAJA</button>
+        </div>
+    </header>
+
+    <main class="flex-1 flex flex-col md:flex-row gap-4 min-h-0">
+        
+        <section class="flex-1 relative rounded-lg border border-bordercolor shadow-2xl overflow-hidden cursor-crosshair">
+            <canvas id="simCanvas"></canvas>
+            <div class="absolute top-4 left-4 text-xs font-mono text-gray-500 pointer-events-none">
+                ESTADO_SISTEMA: <span id="visual-status" class="text-quantum font-bold">AISLADO</span>
+            </div>
+        </section>
+
+        <aside class="flex-none w-full md:w-80 bg-panel border border-bordercolor rounded-lg p-5 flex flex-col gap-6 overflow-y-auto">
+            
+            <div class="flex flex-col gap-2">
+                <label class="text-xs uppercase tracking-widest text-gray-400 font-bold flex justify-between">
+                    Tiempo de Aislamiento
+                    <span id="time-display" class="text-anahuac font-mono">0.0 min</span>
+                </label>
+                <input type="range" id="time-slider" min="0" max="60" step="1" value="0">
+            </div>
+
+            <div class="flex flex-col gap-2">
+                <label class="text-xs uppercase tracking-widest text-gray-400 font-bold flex justify-between">
+                    Tasa de Desintegración
+                    <span id="decay-display" class="text-anahuac font-mono">Estándar</span>
+                </label>
+                <input type="range" id="decay-slider" min="1" max="10" step="1" value="5">
+            </div>
+
+            <div class="flex flex-col gap-3 bg-gray-900/50 p-4 rounded border border-gray-800 mt-auto">
+                <label class="text-xs uppercase tracking-widest text-gray-300 font-bold flex items-center justify-between">
+                    Decoherencia Ambiental
+                    <label class="switch">
+                        <input type="checkbox" id="deco-toggle" onchange="toggleDecoherence()">
+                        <span class="slider-toggle"></span>
+                    </label>
+                </label>
+                <p class="text-[10px] text-gray-500 leading-tight">Introduce moléculas de aire y fotones térmicos. Destruye el aislamiento cuántico.</p>
+            </div>
+
+            <button onclick="resetSimulation()" class="py-2 border border-gray-700 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors text-sm uppercase tracking-wide font-bold">
+                Reiniciar Sistema
+            </button>
+        </aside>
+    </main>
+
+    <footer class="flex-none flex flex-col md:flex-row bg-panel border border-bordercolor rounded-lg shadow-lg min-h-[120px]">
+        <div class="flex-1 p-5 flex flex-col justify-center border-b md:border-b-0 md:border-r border-bordercolor bg-black/30">
+            <span class="text-[10px] uppercase text-gray-500 tracking-widest mb-1">Ecuación de Estado (Notación de Dirac)</span>
+            <div id="equation-text" class="text-anahuac font-mono text-[13px] md:text-sm lg:text-base tracking-wide whitespace-pre-wrap">
+                </div>
+        </div>
+        <div class="flex-1 p-5 flex items-center">
+            <p id="didactic-text" class="text-gray-300 text-sm leading-relaxed">
+                </p>
+        </div>
+    </footer>
+
+    <script>
+        // Textos Didácticos
+        const TEXT_MODE_1 = "Bajo un aislamiento cuántico absoluto, la linealidad de la ecuación de Schrödinger arrastra al sistema macroscópico (el gato) a una superposición ontológica con el microestado. De acuerdo con la ortodoxia, el estado describe una realidad compuesta e indefinida, no una falta de información del observador.";
+        const TEXT_MODE_2 = "Filtro Crítico: En el mundo macroscópico real, el aislamiento cuántico absoluto es imposible. Los trillones de choques térmicos del entorno destruyen de forma irreversible las relaciones de fase cuántica. El sistema se 'mide' a sí mismo físicamente por decoherencia mucho antes de abrir la tapa.";
+        const TEXT_MODE_3 = "Al abrir la caja, la interacción con el observador externo proyecta de golpe el formalismo de posibilidades en una única lectura real. Esto abre el gran debate epistemológico: ¿La medición creó el estado físico en el acto o simplemente reveló una propiedad preexistente?";
+
+        // Variables Globales
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        const eqText = document.getElementById('equation-text');
+        const didacticText = document.getElementById('didactic-text');
+        const visualStatus = document.getElementById('visual-status');
+        
+        let W, H;
+        let mode = 1; // 1: Superposición, 2: Decoherencia, 3: Medición
+        let internalTime = 0;
+        let flashAlpha = 0;
+        
+        // Estado Cuántico
+        let isDecided = false;
+        let finalOutcome = null; // 'ALIVE' o 'DEAD'
+        
+        // Entorno (Partículas de Decoherencia)
+        let particles = [];
+        const numParticles = 200;
+
+        // UI Controls
+        const timeSlider = document.getElementById('time-slider');
+        const decaySlider = document.getElementById('decay-slider');
+        const decoToggle = document.getElementById('deco-toggle');
+
+        // Inicialización y Resize
+        function resize() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width * window.devicePixelRatio;
+            canvas.height = rect.height * window.devicePixelRatio;
+            W = canvas.width;
+            H = canvas.height;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+            canvas.style.width = `${rect.width}px`;
+            canvas.style.height = `${rect.height}px`;
+        }
+        window.addEventListener('resize', resize);
+
+        // Inicializar Partículas Cinéticas
+        function initParticles() {
+            particles = [];
+            for (let i = 0; i < numParticles; i++) {
+                particles.push({
+                    x: Math.random() * (W / window.devicePixelRatio),
+                    y: Math.random() * (H / window.devicePixelRatio),
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 0.5) * 10,
+                    size: Math.random() * 1.5 + 0.5
+                });
+            }
+        }
+
+        // --- CONTROLADORES DE MODOS ---
+
+        function updateUI() {
+            document.getElementById('time-display').innerText = `${parseFloat(timeSlider.value).toFixed(1)} min`;
+            let decay = parseInt(decaySlider.value);
+            document.getElementById('decay-display').innerText = decay < 4 ? "Baja" : (decay > 7 ? "Alta" : "Media");
+
+            // Textos Dinámicos
+            if (mode === 1) {
+                didacticText.innerText = TEXT_MODE_1;
+                visualStatus.innerText = "AISLADO (COHERENCIA)";
+                visualStatus.className = "text-quantum font-bold";
+                
+                // Oscilación de coeficientes
+                let amp1 = (Math.sin(internalTime * 0.05) * 0.2 + 0.707).toFixed(3);
+                let amp2 = (Math.cos(internalTime * 0.05) * 0.2 + 0.707).toFixed(3);
+                eqText.innerHTML = `|Ψ_sistema⟩ = ${amp1} |Átomo intacto⟩|Gato Vivo⟩<br>              + ${amp2} |Átomo desintegrado⟩|Gato Muerto⟩`;
+            } 
+            else if (mode === 2) {
+                didacticText.innerText = TEXT_MODE_2;
+                visualStatus.innerText = "DECOHERENCIA (MEZCLA CLÁSICA)";
+                visualStatus.className = "text-anahuac font-bold";
+                eqText.innerHTML = `ρ = 0.5 |Vivo⟩⟨Vivo| + 0.5 |Muerto⟩⟨Muerto|<br><span class="text-gray-500 text-xs">Matriz de densidad reducida (Diagonalizada)</span>`;
+            }
+            else if (mode === 3) {
+                didacticText.innerText = TEXT_MODE_3;
+                visualStatus.innerText = "SISTEMA OBSERVADO (COLAPSADO)";
+                visualStatus.className = "text-white font-bold";
+                if (finalOutcome === 'ALIVE') {
+                    eqText.innerHTML = `|Ψ⟩ = |Gato Vivo⟩ <br><span class="text-green-500 text-xs">Colapso al Eigenestado 1</span>`;
+                } else {
+                    eqText.innerHTML = `|Ψ⟩ = |Gato Muerto⟩ <br><span class="text-red-500 text-xs">Colapso al Eigenestado 2</span>`;
+                }
+            }
+        }
+
+        function setMode(m) {
+            if (mode === 3 && m !== 3) return; // Si está abierta, debe reiniciar
+            
+            mode = m;
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`tab-${m}`).classList.add('active');
+
+            if (m === 1) {
+                decoToggle.checked = false;
+                isDecided = false;
+            } else if (m === 2) {
+                decoToggle.checked = true;
+                if (!isDecided) {
+                    finalOutcome = Math.random() > 0.5 ? 'ALIVE' : 'DEAD';
+                    isDecided = true;
+                }
+                if (particles.length === 0) initParticles();
+            }
+            updateUI();
+        }
+
+        function toggleDecoherence() {
+            if (mode === 3) return;
+            setMode(decoToggle.checked ? 2 : 1);
+        }
+
+        function openBox() {
+            if (mode === 3) return;
+            if (!isDecided) {
+                finalOutcome = Math.random() > 0.5 ? 'ALIVE' : 'DEAD';
+                isDecided = true;
+            }
+            flashAlpha = 1.0;
+            mode = 3;
+            
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`tab-3`).classList.add('active');
+            
+            decoToggle.disabled = true;
+            timeSlider.disabled = true;
+            decaySlider.disabled = true;
+            updateUI();
+        }
+
+        function resetSimulation() {
+            mode = 1;
+            isDecided = false;
+            finalOutcome = null;
+            flashAlpha = 0;
+            timeSlider.value = 0;
+            decoToggle.checked = false;
+            
+            decoToggle.disabled = false;
+            timeSlider.disabled = false;
+            decaySlider.disabled = false;
+            
+            particles = [];
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`tab-1`).classList.add('active');
+            updateUI();
+        }
+
+        // --- MOTOR DE DIBUJO (CANVAS API) ---
+
+        // Funciones de dibujo de paths
+        function drawCatAlive(ctx, x, y) {
+            ctx.beginPath();
+            ctx.ellipse(x, y + 25, 25, 35, 0, 0, Math.PI * 2); // Cuerpo
+            ctx.arc(x, y - 20, 22, 0, Math.PI * 2); // Cabeza
+            ctx.moveTo(x - 15, y - 35); ctx.lineTo(x - 25, y - 60); ctx.lineTo(x - 5, y - 40); // Oreja Izq
+            ctx.moveTo(x + 15, y - 35); ctx.lineTo(x + 25, y - 60); ctx.lineTo(x + 5, y - 40); // Oreja Der
+            ctx.fill(); ctx.stroke();
+            // Cola
+            ctx.beginPath(); ctx.moveTo(x + 15, y + 50); ctx.quadraticCurveTo(x + 50, y + 60, x + 40, y + 10); ctx.stroke();
+        }
+
+        function drawCatDead(ctx, x, y) {
+            ctx.beginPath();
+            ctx.ellipse(x, y + 40, 45, 20, 0, 0, Math.PI * 2); // Cuerpo acostado
+            ctx.arc(x - 45, y + 45, 20, 0, Math.PI * 2); // Cabeza
+            ctx.moveTo(x - 60, y + 35); ctx.lineTo(x - 80, y + 20); ctx.lineTo(x - 50, y + 25); // Oreja Izq
+            ctx.moveTo(x - 30, y + 30); ctx.lineTo(x - 40, y + 10); ctx.lineTo(x - 20, y + 25); // Oreja Der
+            ctx.fill(); ctx.stroke();
+            // Patas rígidas arriba
+            ctx.beginPath();
+            ctx.moveTo(x - 15, y + 25); ctx.lineTo(x - 15, y - 5);
+            ctx.moveTo(x + 20, y + 30); ctx.lineTo(x + 20, y);
+            ctx.stroke();
+        }
+
+        function drawAtom(ctx, x, y, state, alpha) {
+            ctx.globalAlpha = alpha;
+            ctx.shadowBlur = 20;
+            if (state === 'intact') {
+                ctx.fillStyle = '#00e5ff'; ctx.shadowColor = '#00e5ff';
+                let r = mode === 1 ? 15 + Math.sin(internalTime*0.2)*5 : 15;
+                ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+            } else {
+                ctx.fillStyle = '#ff2a2a'; ctx.shadowColor = '#ff2a2a';
+                ctx.beginPath(); ctx.arc(x, y, 15, 0, Math.PI * 2); ctx.fill();
+                // Fragmentos
+                ctx.beginPath(); ctx.arc(x+25, y-15, 5, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(x-20, y+20, 4, 0, Math.PI*2); ctx.fill();
+            }
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1.0;
+        }
+
+        function drawMechanism(ctx, x, y, broken, alpha) {
+            ctx.globalAlpha = alpha;
+            ctx.lineWidth = 3;
+            // Contador
+            ctx.fillStyle = '#333'; ctx.strokeStyle = '#666';
+            ctx.fillRect(x - 30, y - 60, 40, 30); ctx.strokeRect(x - 30, y - 60, 40, 30);
+            
+            // Martillo y Vial
+            if (!broken) {
+                ctx.beginPath(); ctx.moveTo(x + 10, y - 45); ctx.lineTo(x + 60, y - 45); ctx.stroke(); // Brazo
+                ctx.fillStyle = '#888'; ctx.fillRect(x + 50, y - 55, 15, 20); // Mazo
+                
+                // Vial Intacto
+                ctx.fillStyle = 'rgba(0,255,100,0.4)'; ctx.strokeStyle = '#fff';
+                ctx.fillRect(x + 45, y, 25, 40); ctx.strokeRect(x + 45, y, 25, 40);
+            } else {
+                ctx.beginPath(); ctx.moveTo(x + 10, y - 45); ctx.lineTo(x + 50, y); ctx.stroke(); // Brazo caído
+                ctx.fillStyle = '#888'; ctx.fillRect(x + 40, y - 10, 20, 15); // Mazo caído
+                
+                // Vial Roto
+                ctx.fillStyle = 'rgba(0,255,100,0.6)';
+                ctx.beginPath(); ctx.ellipse(x + 57, y + 40, 30, 8, 0, 0, Math.PI*2); ctx.fill(); // Charco
+                ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.moveTo(x+45, y+20); ctx.lineTo(x+55, y+40); ctx.lineTo(x+65, y+25); ctx.stroke();
+            }
+            ctx.globalAlpha = 1.0;
+        }
+
+        function render() {
+            const w = W / window.devicePixelRatio;
+            const h = H / window.devicePixelRatio;
+            
+            ctx.clearRect(0, 0, w, h);
+            internalTime++;
+
+            // Actualizar UI periódicamente
+            if (internalTime % 5 === 0) updateUI();
+
+            // Partículas de Decoherencia (Modo 2)
+            if (mode === 2 && particles.length > 0) {
+                ctx.fillStyle = 'rgba(255,255,255,0.4)';
+                for (let p of particles) {
+                    p.x += p.vx; p.y += p.vy;
+                    if (p.x < 0 || p.x > w) p.vx *= -1;
+                    if (p.y < 0 || p.y > h) p.vy *= -1;
+                    ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
+                }
+            }
+
+            const cY = h / 2;
+            const posAtom = w * 0.2;
+            const posMech = w * 0.45;
+            const posCat = w * 0.75;
+
+            ctx.lineWidth = 3;
+
+            // RENDERIZADO POR MODOS
+            if (mode === 1) {
+                // Modo 1: SUPERPOSICIÓN (Translucidez, oscilación)
+                let a1 = Math.abs(Math.sin(internalTime * 0.05)) * 0.5 + 0.2;
+                let a2 = Math.abs(Math.cos(internalTime * 0.05)) * 0.5 + 0.2;
+
+                // Átomo
+                drawAtom(ctx, posAtom, cY, 'intact', a1);
+                drawAtom(ctx, posAtom, cY, 'decayed', a2);
+
+                // Mecanismo
+                drawMechanism(ctx, posMech, cY, false, a1);
+                drawMechanism(ctx, posMech, cY, true, a2);
+
+                // Gato
+                ctx.fillStyle = '#00e5ff'; ctx.strokeStyle = '#00e5ff';
+                drawCatAlive(ctx, posCat, cY, a1);
+                
+                ctx.fillStyle = '#ff2a2a'; ctx.strokeStyle = '#ff2a2a';
+                drawCatDead(ctx, posCat, cY, a2);
+            } 
+            else if (mode === 2) {
+                // Modo 2: DECOHERENCIA (Estado clásico fijo pero opaco)
+                let isAlive = finalOutcome === 'ALIVE';
+                
+                drawAtom(ctx, posAtom, cY, isAlive ? 'intact' : 'decayed', 1.0);
+                drawMechanism(ctx, posMech, cY, !isAlive, 1.0);
+                
+                ctx.fillStyle = isAlive ? '#00e5ff' : '#ff2a2a';
+                ctx.strokeStyle = isAlive ? '#00e5ff' : '#ff2a2a';
+                
+                if (isAlive) drawCatAlive(ctx, posCat, cY);
+                else drawCatDead(ctx, posCat, cY);
+            }
+            else if (mode === 3) {
+                // Modo 3: COLAPSO MEDIDO
+                let isAlive = finalOutcome === 'ALIVE';
+                
+                drawAtom(ctx, posAtom, cY, isAlive ? 'intact' : 'decayed', 1.0);
+                drawMechanism(ctx, posMech, cY, !isAlive, 1.0);
+                
+                ctx.fillStyle = isAlive ? '#00e5ff' : '#ff2a2a';
+                ctx.strokeStyle = isAlive ? '#00e5ff' : '#ff2a2a';
+                ctx.shadowBlur = 30; ctx.shadowColor = ctx.fillStyle;
+                
+                if (isAlive) drawCatAlive(ctx, posCat, cY);
+                else drawCatDead(ctx, posCat, cY);
+                ctx.shadowBlur = 0;
+            }
+
+            // Efecto Flash (Al abrir caja)
+            if (flashAlpha > 0) {
+                ctx.fillStyle = `rgba(255, 255, 255, ${flashAlpha})`;
+                ctx.fillRect(0, 0, w, h);
+                flashAlpha -= 0.05;
+            }
+
+            requestAnimationFrame(render);
+        }
+
+        // Inicializar
+        resize();
+        initParticles();
+        resetSimulation();
+        render();
+
+    </script>
+</body>
+</html>
